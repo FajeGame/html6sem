@@ -1,0 +1,34 @@
+<component name="libraryTable">
+  <library name="lib">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-script-runtime-sources.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-reflect.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-script-runtime.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/sam-with-receiver-compiler-plugin.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/allopen-compiler-plugin.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-runner.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-runtime-sources.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-stdlib-sources.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-runtime.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-stdlib-js-sources.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-test-js.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/noarg-compiler-plugin.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-compiler-client-embeddable.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-stdlib.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-daemon-client.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-annotation-processing.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-preloader.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-build-common-test.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-compiler.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-test.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/android-extensions-compiler.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/source-sections-compiler-plugin.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-jslib.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-stdlib-js.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-ant.jar!/" />
+      <root url="jar://$PROJECT_DIR$/node_modules/kotlinc/kotlinc/lib/kotlin-jslib-sources.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

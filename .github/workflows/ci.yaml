@@ -1,0 +1,54 @@
+name: Kotlin Homework CI
+
+on:
+  pull_request:
+    branches:
+      - master
+      - main
+
+jobs:
+  check-tasks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - source: task1.kt
+            ref: t1.jar
+
+          - source: task2.kt
+            ref: t2.jar
+
+          - source: task3.kt
+            ref: t3.jar
+
+          - source: task4.kt
+            ref: t4.jar
+
+          - source: task5.kt
+            ref: t5.jar
+
+          - source: task6.kt
+            ref: t6.jar
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Kotlin
+        uses: fwilhe2/setup-kotlin@main
+
+      - name: Run task check for ${{ matrix.source }}
+        run: |
+          chmod +x ./check.sh
+          ./check.sh "src/${{ matrix.source }}" ".solutions/${{ matrix.ref }}" \
+            "the quick brown fox jumps over the lazy dog" \
+            "apple banana apple orange banana apple" \
+            "10 2 1 20 2 10 30 ! @ #" \
+            "Word word WORD woRd"
