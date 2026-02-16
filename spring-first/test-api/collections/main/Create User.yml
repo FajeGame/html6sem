@@ -1,0 +1,49 @@
+info:
+  name: Create User
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/greeting"
+  headers:
+    - name: Accept
+      value: application/json
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+          "name": "Ivan",
+          "surname": "Ivanov"
+      }
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // Получаем тело ответа и парсим JSON
+        const response = res.getBody();
+        const jsonResponse = typeof response === 'string' ? JSON.parse(response) : response;
+
+        // Проверяем, что ответ содержит id
+        if (jsonResponse && jsonResponse.id) {
+            // Сохраняем ID в переменную окружения
+            bru.setEnvVar("savedUserId", jsonResponse.id);
+            console.log("User ID saved: " + jsonResponse.id);
+        } else {
+            console.error("ID not found in response");
+        }
+
+        // Дополнительная проверка статуса
+        if (res.status !== 200) {
+            console.error("Expected 200, got " + res.status);
+        }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
