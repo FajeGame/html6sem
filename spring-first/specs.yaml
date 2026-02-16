@@ -1,0 +1,108 @@
+openapi: 3.0.3
+info:
+  title: Greeting API
+  description: API для демонстрации работы Spring Boot контроллера
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local Development Server
+
+paths:
+  /greeting:
+    get:
+      summary: Получить приветствие или данные пользователя
+      description: >
+        Этот эндпоинт работает в двух режимах:
+        1. Если параметр `id` НЕ передан -> возвращает стандартное приветствие (GreetingMain).
+        2. Если параметр `id` передан -> ищет пользователя в памяти и возвращает его данные (UserData).
+      parameters:
+        - name: id
+          in: query
+          description: ID пользователя для поиска (UUID)
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Успешный ответ (структура зависит от наличия параметра id)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/GreetingMain'
+                  - $ref: '#/components/schemas/UserData'
+        '404':
+          description: Пользователь с указанным id не найден (если передан параметр id)
+
+    post:
+      summary: Создать/Сохранить пользователя
+      description: Принимает имя и фамилию, генерирует UUID и сохраняет в локальную переменную внутри контроллера.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserData'
+      responses:
+        '200':
+          description: Пользователь успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GreetingUser'
+
+  /greeting/{id}:
+    get:
+      summary: Получить пользователя по ID (через Path Variable)
+      description: Альтернативный способ получения данных пользователя через путь URL.
+      parameters:
+        - name: id
+          in: path
+          description: ID пользователя (UUID)
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Пользователь найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserData'
+        '404':
+          description: Пользователь не найден
+
+components:
+  schemas:
+    GreetingMain:
+      type: object
+      properties:
+        text:
+          type: string
+          example: "Hello World"
+
+    GreetingUser:
+      type: object
+      properties:
+        text:
+          type: string
+          example: "Hello, Ivanov Ivan"
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+    UserData:
+      type: object
+      required:
+        - name
+        - surname
+      properties:
+        name:
+          type: string
+          example: "Ivan"
+        surname:
+          type: string
+          example: "Ivanov"
