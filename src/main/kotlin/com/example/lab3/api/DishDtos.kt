@@ -1,6 +1,7 @@
 package com.example.lab3.api
 
 import com.example.lab3.domain.Dish
+import com.fasterxml.jackson.annotation.JsonProperty
 import jakarta.validation.constraints.DecimalMin
 import jakarta.validation.constraints.NotBlank
 import java.math.BigDecimal
@@ -12,6 +13,7 @@ data class DishRequest(
     val description: String,
     @field:DecimalMin(value = "0.0", inclusive = false, message = "price must be greater than 0")
     val price: BigDecimal,
+    @JsonProperty("isAvailable")
     val isAvailable: Boolean? = true
 )
 
@@ -20,6 +22,7 @@ data class DishResponse(
     val name: String,
     val description: String,
     val price: BigDecimal,
+    @JsonProperty("isAvailable")
     val isAvailable: Boolean
 )
 

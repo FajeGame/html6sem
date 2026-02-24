@@ -29,4 +29,4 @@ if [ -z "$JAVA_HOME" ]; then
   exit 1
 fi
 
-exec "$JAVA_HOME/bin/java" -jar "$WRAPPER_JAR" "$@"
+exec "$JAVA_HOME/bin/java" -classpath "$WRAPPER_JAR" -Dmaven.multiModuleProjectDirectory="$MAVEN_PROJECTBASEDIR" org.apache.maven.wrapper.MavenWrapperMain "$@"

@@ -1,6 +1,7 @@
 package com.example.lab3.api
 
 import com.example.lab3.domain.User
+import com.fasterxml.jackson.annotation.JsonProperty
 import jakarta.validation.constraints.NotBlank
 
 data class UserRequest(
@@ -10,6 +11,7 @@ data class UserRequest(
     val firstName: String,
     @field:NotBlank(message = "lastName is required")
     val lastName: String,
+    @JsonProperty("isActive")
     val isActive: Boolean? = true
 )
 
@@ -18,6 +20,7 @@ data class UserResponse(
     val email: String,
     val firstName: String,
     val lastName: String,
+    @JsonProperty("isActive")
     val isActive: Boolean
 )
 
