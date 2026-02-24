@@ -1,0 +1,8 @@
+.gradle/
+build/
+/data/
+*.iml
+.idea/
+out/
+target/
+node_modules/
