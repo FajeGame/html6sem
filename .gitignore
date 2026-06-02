@@ -3,9 +3,4 @@
 /out/
 /build/
 /*.iml
-/node_modules/
-/logs/
-/data/
-/.env
-*.out
-*.err
+
