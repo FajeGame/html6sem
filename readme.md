@@ -1,534 +1,390 @@
-# Лабораторная работа №5
+# Лабораторная работа №6
 
-## Обработка ошибок. Валидация. Логгирование
-
----
-
-## Цель работы
-
-Добавить в проект доставки еды из ЛР-4: валидацию входных данных (`@Valid`), единую обработку ошибок через `@RestControllerAdvice` с иерархией кастомных исключений и структурированное логгирование ключевых событий.
+**Тема:** тестирование Spring Boot-приложения (unit-тесты, интеграционные тесты, Testcontainers)
 
 ---
 
-## Что нужно сдать
+## Описание проекта
 
-Ссылку на PR в ваш репозиторий (шаблон у вас есть).
+Основные сущности:
+
+| Сущность    | Назначение                                      |
+|:------------|:------------------------------------------------|
+| User        | Пользователь системы                            |
+| Restaurant  | Ресторан                                        |
+| Dish        | Блюдо, привязанное к ресторану                  |
+| Order       | Заказ пользователя, содержащий список блюд      |
+
+API доступен по префиксу `/api/v1/`. Спецификация эндпоинтов — в файле `spec.yaml`.
 
 ---
 
-## Теоретический блок
 
-### 1) Зачем нужна обработка ошибок
+## Структура проекта
 
-Сейчас в вашем проекте ошибки возвращаются как попало: Spring сам формирует ответ с трейсом, статусы непредсказуемы, клиент не знает, чего ожидать.
-
-Пример того, что Spring вернёт по умолчанию при необработанном исключении:
-```json
-{
-  "timestamp": "2025-03-07T12:00:00.000+00:00",
-  "status": 500,
-  "error": "Internal Server Error",
-  "trace": "java.lang.RuntimeException: Something went wrong\n\tat com.example...",
-  "path": "/api/v1/restaurants"
-}
+```
+lab6/
+├── src/main/kotlin/com/example/lab3/
+│   ├── api/                    # REST-контроллеры, DTO, обработчик ошибок
+│   ├── application/            # Сервисный слой (бизнес-логика)
+│   ├── domain/                 # Доменные модели и порты репозиториев
+│   └── infrastructure/
+│       ├── jpa/                # JPA-сущности, репозитории, адаптеры
+│       ├── mock/               # In-memory реализации (режим mock)
+│       └── DataProviderConfig.kt
+├── src/main/resources/
+│   ├── application.yml         # Конфигурация приложения
+│   ├── logback-spring.xml      # Настройка логирования
+│   └── db/migration/           # SQL-миграции Flyway (V1–V5)
+├── src/test/kotlin/com/example/lab3/
+│   ├── application/            # Unit-тесты сервисов
+│   └── api/                    # Интеграционные тесты контроллеров
+├── src/test/resources/
+│   ├── application.yaml        # Общие настройки для тестов
+│   └── application-test.yaml   # Профиль test
+├── .test/run-test.sh           # Скрипт ручной проверки API (из ЛР-5)
+├── .github/workflows/ci.yaml   # CI: запуск тестов при PR
+├── docker-compose.yaml         # PostgreSQL для локальной разработки
+├── spec.yaml                   # OpenAPI-спецификация
+└── pom.xml
 ```
 
-Проблемы:
-- Клиент видит внутренности сервера (`trace`) — это небезопасно.
-- Формат меняется от ошибки к ошибке.
-- Нет полезной информации о том, **что именно** пошло не так.
+### Слои приложения
 
-Цель — сделать так, чтобы API **всегда** возвращал предсказуемый формат ошибки с правильным HTTP-статусом.
+Запрос проходит цепочку:
+
+```
+Controller → Service → RepositoryPort → JpaAdapter → PostgreSQL
+```
+
+Обработка ошибок централизована в `ApiExceptionHandler` (`@RestControllerAdvice`). Кастомные исключения: `NotFoundException` (404), `AlreadyExistsException` (409), `InvalidOrderStateException` (400).
 
 ---
 
-### 2) Единый формат ответа об ошибке
+## Реализованное в ЛР-6
 
-Определим DTO для ошибок. Базовый класс — `ErrorResponse`, для ошибок валидации — наследник с деталями по полям:
+### 1. Зависимости для тестирования
 
-```kotlin
-open class ErrorResponse(
-    val status: Int,
-    val message: String? = null,
-    val timestamp: LocalDateTime = LocalDateTime.now()
-)
-
-class ValidationErrorResponse(
-    status: Int,
-    message: String? = null,
-    val errors: Map<String, String>,
-    timestamp: LocalDateTime = LocalDateTime.now()
-) : ErrorResponse(status, message, timestamp)
-```
-
-> `data class` нельзя наследовать от другого `data class`, поэтому используем обычные классы с `open`.
-
-Пример ответа при ошибке валидации:
-```json
-{
-  "status": 400,
-  "message": "Ошибка валидации",
-  "errors": {
-    "name": "Название не может быть пустым",
-    "price": "Цена должна быть больше 0"
-  },
-  "timestamp": "2025-03-07T12:00:00"
-}
-```
-
----
-
-### 3) Иерархия кастомных исключений
-
-У приложения должна быть собственная надстройка исключений над системными. Бизнес-логика не должна бросать голые Spring/JPA-исключения — она бросает свои, а `@ControllerAdvice` маппит их на HTTP-статусы.
-
-Удобный подход — `sealed class`:
-
-```kotlin
-sealed class AppException(message: String) : RuntimeException(message)
-
-class NotFoundException(message: String) : AppException(message)
-
-class AlreadyExistsException(message: String) : AppException(message)
-
-class InvalidOrderStateException(message: String) : AppException(message)
-```
-
-Преимущества `sealed class`:
-- Компилятор Kotlin гарантирует, что `when`-выражение покрывает все варианты.
-- Иерархия закрыта — нельзя случайно добавить наследника в другом модуле.
-- Каждый тип исключения несёт **семантику**, а не просто сообщение.
-
-Использование в сервисном слое:
-
-```kotlin
-@Service
-class RestaurantService(
-    private val restaurantRepository: RestaurantRepositoryPort
-) {
-    fun getById(id: Long): Restaurant {
-        return restaurantRepository.findById(id)
-            ?: throw NotFoundException("Ресторан с id=$id не найден")
-    }
-
-    fun create(command: CreateRestaurantCommand): Restaurant {
-        if (restaurantRepository.existsByName(command.name)) {
-            throw AlreadyExistsException("Ресторан '${command.name}' уже существует")
-        }
-        return restaurantRepository.save(command.toEntity())
-    }
-}
-```
-
-> Обратите внимание: сервис не знает про HTTP-статусы. Он бросает доменное исключение, а маппинг на `404`/`409` происходит в `@ControllerAdvice`.
-
----
-
-### 4) Глобальный обработчик ошибок: @RestControllerAdvice
-
-`@RestControllerAdvice` — это специальный бин Spring, который перехватывает исключения, выброшенные из контроллеров, и формирует ответ.
-
-```kotlin
-@RestControllerAdvice
-class GlobalExceptionHandler {
-    
-    @ExceptionHandler(AppException::class)
-    fun handleCommon(e: AppException): ResponseEntity<ErrorResponse> {        
-        val status = when (e) {
-            is NotFoundException -> status = HttpStatus.NOT_FOUND
-            is AlreadyExistsException -> status = HttpStatus.CONFLICT
-            is InvalidOrderStateException,
-            is BadCredentialsException -> status = Http.BAD_REQUEST
-            // ...
-        }
-        
-        return ResponseEntity
-            .status(status)
-            .body(ErrorResponse(status.value(), e.message))
-    }
-
-    @ExceptionHandler(MethodArgumentNotValidException::class)
-    fun handleValidationExceptions(ex: MethodArgumentNotValidException): ResponseEntity<ValidationErrorResponse> {
-        val errors = ex.bindingResult.fieldErrors.associate {
-            it.field to (it.defaultMessage ?: "Incorrect value")
-        }
-        
-        return ResponseEntity
-            .status(HttpStatus.BAD_REQUEST)
-            .body(ValidationErrorResponse(
-                HttpStatus.BAD_REQUEST, 
-                "Method parameter validation error", 
-                errors
-            ))
-    }
-
-    @ExceptionHandler(Exception::class)
-    fun handleUnexpected(e: Exception): ResponseEntity<ErrorResponse> {
-        return ResponseEntity
-            .status(HttpStatus.INTERNAL_SERVER_ERROR)
-            .body(ErrorResponse(500, "Internal server error"))
-    }
-}
-```
-
-Порядок обработки: Spring ищет **наиболее конкретный** обработчик. `Exception::class` — это fallback, он сработает только если ни один другой не подошёл.
-
-> Важно: в `handleUnexpected` не возвращаем `e.message` клиенту — оно может содержать внутренности системы. Вместо этого логируем полную ошибку (см. раздел про логгирование).
-
----
-
-### 5) Валидация входных данных: @Valid, @Validated + jakarta.validation
-
-Валидация — это проверка данных на входе в контроллер, **до** того как они попадут в сервисный слой.
-
-**Зависимость в `pom.xml`:**
+**Файл:** `pom.xml`
 
 ```xml
 <dependency>
     <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-validation</artifactId>
+    <artifactId>spring-boot-starter-test</artifactId>
+    <scope>test</scope>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-testcontainers</artifactId>
+    <scope>test</scope>
+</dependency>
+<dependency>
+    <groupId>org.testcontainers</groupId>
+    <artifactId>junit-jupiter</artifactId>
+    <scope>test</scope>
+</dependency>
+<dependency>
+    <groupId>org.testcontainers</groupId>
+    <artifactId>postgresql</artifactId>
+    <scope>test</scope>
 </dependency>
 ```
 
-#### Аннотации на DTO
-
-```kotlin
-data class CreateRestaurantRequest(
-    @field:NotBlank(message = "Название не может быть пустым")
-    @field:Size(min = 2, max = 100, message = "Название: от 2 до 100 символов")
-    val name: String,
-
-    @field:NotBlank(message = "Адрес не может быть пустым")
-    val address: String
-)
-
-data class CreateDishRequest(
-    @field:NotBlank(message = "Название не может быть пустым")
-    val name: String,
-
-    @field:Min(value = 1, message = "Цена должна быть больше 0")
-    val price: BigDecimal,
-
-    val description: String? = null
-)
-
-data class CreateOrderRequest(
-    @field:NotNull(message = "userId обязателен")
-    val userId: Long,
-
-    @field:NotEmpty(message = "Заказ должен содержать хотя бы одно блюдо")
-    val dishIds: List<Long>
-)
-```
-
-> Обратите внимание: в Kotlin нужно писать `@field:NotBlank`, а не просто `@NotBlank`. Без `@field:` аннотация попадёт на параметр конструктора, а не на поле, и Spring её не увидит.
-
-#### @Valid vs @Validated
-
-`@Valid` (jakarta) и `@Validated` (Spring) — две аннотации для включения валидации. Они похожи, но работают по-разному.
-
-**`@Valid`** — ставится перед `@RequestBody`. Проверяет поля объекта:
-
-```kotlin
-@PostMapping
-fun createRestaurant(@Valid @RequestBody request: CreateRestaurantRequest): ResponseEntity<RestaurantResponse> {
-    // Если валидация не пройдена, Spring выбросит MethodArgumentNotValidException
-    // до входа в тело метода. Его поймает наш GlobalExceptionHandler.
-    val restaurant = restaurantService.create(request.toCommand())
-    return ResponseEntity.status(HttpStatus.CREATED).body(restaurant.toResponse())
-}
-```
-
-**`@Validated`** — ставится на **класс контроллера**. Позволяет валидировать `@PathVariable` и `@RequestParam` напрямую:
-
-```kotlin
-@RestController
-@RequestMapping("/api/v1/restaurants")
-@Validated
-class RestaurantController(private val restaurantService: RestaurantService) {
-
-    @GetMapping("/{id}")
-    fun getById(@PathVariable @Min(1) id: Long): ResponseEntity<RestaurantResponse> {
-        // Без @Validated на классе аннотация @Min на @PathVariable не сработает
-        val restaurant = restaurantService.getById(id)
-        return ResponseEntity.ok(restaurant.toResponse())
-    }
-
-    @GetMapping
-    fun search(
-        @RequestParam @Size(min = 2, message = "Минимум 2 символа для поиска") query: String?
-    ): ResponseEntity<List<RestaurantResponse>> {
-        // ...
-    }
-}
-```
-
-> При провале валидации через `@Validated` Spring выбросит `ConstraintViolationException` (а не `MethodArgumentNotValidException`). Его тоже нужно обработать в `GlobalExceptionHandler`.
-
-```kotlin
-@ExceptionHandler(ConstraintViolationException::class)
-fun handleConstraintViolation(e: ConstraintViolationException): ResponseEntity<ErrorResponse> {
-    return ResponseEntity
-        .status(HttpStatus.BAD_REQUEST)
-        .body(ErrorResponse(400, e.message))
-}
-```
-
-| Что            | `@Valid`                          | `@Validated`                     |
-|:---------------|:----------------------------------|:---------------------------------|
-| Источник       | Jakarta (стандарт)                | Spring (расширение)              |
-| Куда ставить   | Перед параметром метода           | На класс контроллера             |
-| Что валидирует | `@RequestBody`                    | `@PathVariable`, `@RequestParam` |
-| Исключение     | `MethodArgumentNotValidException` | `ConstraintViolationException`   |
-
-На практике их используют **вместе**: `@Validated` на классе + `@Valid` перед `@RequestBody`.
-
-#### Полезные аннотации
-
-| Аннотация       | Назначение                            | Пример                                |
-|:----------------|:--------------------------------------|:--------------------------------------|
-| `@NotNull`      | Не null                               | `@field:NotNull`                      |
-| `@NotBlank`     | Не null, не пустая, не только пробелы | `@field:NotBlank`                     |
-| `@NotEmpty`     | Не null и не пустая коллекция/строка  | `@field:NotEmpty`                     |
-| `@Size`         | Ограничение длины                     | `@field:Size(min = 2, max = 100)`     |
-| `@Min` / `@Max` | Числовые границы                      | `@field:Min(1)`                       |
-| `@Email`        | Проверка формата email                | `@field:Email`                        |
-| `@Pattern`      | Регулярное выражение                  | `@field:Pattern(regexp = "^[A-Z].*")` |
-| `@Positive`     | Число > 0                             | `@field:Positive`                     |
+`spring-boot-starter-test` включает JUnit 5 и Mockito. Testcontainers подключается отдельными модулями для интеграционных тестов с PostgreSQL.
 
 ---
 
-### 6) Логгирование
+### 2. Тестовый профиль
 
-Логгирование — это запись событий, происходящих в приложении. Без логов невозможно диагностировать ошибки на проде.
-
-Spring Boot использует `SLF4J` + `Logback` по умолчанию. Дополнительных зависимостей не нужно.
-
-#### Создание логгера
-
-Можно использовать `SLF4J` напрямую, но более предпочтительный подход в Kotlin — библиотека `kotlin-logging`. Она является обёрткой над SLF4J и даёт несколько преимуществ:
-- **Лямбда-синтаксис** — строка лога не вычисляется, если уровень отключён (экономия ресурсов).
-- **Kotlin-идиоматичный API** — никаких `{}` плейсхолдеров, обычная строковая интерполяция.
-- **Компактнее** — не нужно передавать `Class` в `getLogger`.
-
-**Зависимость в `pom.xml`:**
-
-```xml
-<dependency>
-    <groupId>io.github.oshai</groupId>
-    <artifactId>kotlin-logging-jvm</artifactId>
-    <version>7.0.13</version>
-</dependency>
-```
-
-**Использование:**
-
-```kotlin
-@Service
-class RestaurantService(
-    private val restaurantRepository: RestaurantRepositoryPort
-) {
-    private val logger = KotlinLogging.logger {}
-    
-    fun getById(id: Long): Restaurant {
-        logger.info { "Запрос ресторана с id=$id" }
-        return restaurantRepository.findById(id)
-            ?: throw NotFoundException("Ресторан с id=$id не найден").also {
-                logger.warn { "Ресторан с id=$id не найден" }
-            }
-    }
-
-    fun create(command: CreateRestaurantCommand): Restaurant {
-        val restaurant = restaurantRepository.save(command.toEntity())
-        logger.info { "Создан ресторан: id=${restaurant.id}, name=${restaurant.name}" }
-        return restaurant
-    }
-}
-```
-
-Для сравнения — тот же код на чистом SLF4J (более многословно):
-```kotlin
-private val logger = LoggerFactory.getLogger(RestaurantService::class.java)
-
-logger.info("Запрос ресторана с id={}", id)  // плейсхолдеры вместо интерполяции
-```
-
-#### Уровни логирования
-
-| Уровень | Когда использовать                                  |
-|:--------|:----------------------------------------------------|
-| `ERROR` | Что-то сломалось, требует внимания                  |
-| `WARN`  | Нештатная ситуация, но приложение работает          |
-| `INFO`  | Ключевые бизнес-события (создан заказ, удалён ресторан) |
-| `DEBUG` | Детали для отладки (значения переменных, SQL)       |
-| `TRACE` | Максимальная детализация (редко используется)       |
-
-#### Настройка уровней в application.yaml
-
-Простой способ — указать уровни прямо в `application.yaml`:
+**Файл:** `src/test/resources/application.yaml`
 
 ```yaml
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    enabled: true
+
 logging:
   level:
-    root: INFO
-    com.example.delivery: DEBUG
-    org.springframework.web: WARN
-    org.hibernate.SQL: DEBUG
+    root: WARN
+    com.example.lab3: DEBUG
 ```
 
-- `root` — общий уровень логирования для всего приложения (по умолчанию `INFO`).
-- `com.example.delivery` — корневой пакет вашего проекта, для него включен `DEBUG`.
-- Остальные пакеты можно переопределить по отдельности (`org.springframework.web: WARN` и т.д.).
+- `ddl-auto: validate` — Hibernate не меняет схему, только проверяет
+- Flyway включён — миграции накатываются при старте тестового контекста
+- Уровень логирования `root: WARN`, для пакета приложения — `DEBUG`
 
-#### Продвинутая настройка: logback-spring.xml
+Интеграционные тесты дополнительно помечены `@ActiveProfiles("test")`, профиль описан в `application-test.yaml`.
 
-`application.yaml` подходит для простых случаев. Для более гибкой настройки (формат вывода, запись в файл, ротация логов) используется файл `logback-spring.xml` в `src/main/resources/`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<configuration>
-
-    <!-- Вывод в консоль -->
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
-        </encoder>
-    </appender>
-
-    <!-- Вывод в файл с ротацией -->
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/app.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <!-- Новый файл каждый день -->
-            <fileNamePattern>logs/app.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-            <!-- Максимальный размер одного файла -->
-            <maxFileSize>10MB</maxFileSize>
-            <!-- Хранить логи за последние 30 дней -->
-            <maxHistory>30</maxHistory>
-        </rollingPolicy>
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
-        </encoder>
-    </appender>
-
-    <!-- Уровни для пакетов -->
-    <logger name="com.example.delivery" level="DEBUG"/>
-    <logger name="org.springframework.web" level="WARN"/>
-    <logger name="org.hibernate.SQL" level="DEBUG"/>
-
-    <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="FILE"/>
-    </root>
-
-</configuration>
+```properties
+api.version=1.44
 ```
 
-> Если `logback-spring.xml` присутствует, он **заменяет** настройки логирования из `application.yaml`. Не используйте оба способа одновременно.
+Без этой настройки Testcontainers 1.21 по умолчанию обращается к Docker API 1.32 и падает с ошибкой `Could not find a valid Docker environment`.
 
-Элементы паттерна:
-- `%d{...}` — дата и время
-- `%thread` — имя потока
-- `%-5level` — уровень (INFO, WARN...), выровненный по 5 символам
-- `%logger{36}` — имя логгера (обрезанное до 36 символов)
-- `%msg%n` — сообщение и перенос строки
+---
 
-#### Логгирование в GlobalExceptionHandler
+### 3. Unit-тесты сервисного слоя
 
-Особенно важно логировать непредвиденные ошибки — те, что попадают в fallback-обработчик:
+Для каждого сервиса создан отдельный тестовый класс. Зависимости заменены моками через Mockito, Spring-контекст не поднимается (`@ExtendWith(MockitoExtension::class)`, без `@SpringBootTest`).
+
+| Класс                  | Тестов | Что проверяется                                              |
+|:-----------------------|:-------|:-------------------------------------------------------------|
+| RestaurantServiceTest  | 6      | Создание, дубликат имени, поиск, удаление                    |
+| OrderServiceTest       | 7      | Создание заказа, валидация, смена статуса, недопустимый переход |
+| UserServiceTest        | 4      | Создание/получение существующего, поиск, удаление            |
+| DishServiceTest        | 4      | CRUD-операции через репозиторий                              |
+
+Структура каждого теста: **Arrange → Act → Assert**.
+
+#### Позитивный сценарий
+
+**Файл:** `src/test/kotlin/com/example/lab3/application/RestaurantServiceTest.kt`
 
 ```kotlin
-@ExceptionHandler(Exception::class)
-fun handleUnexpected(e: Exception): ResponseEntity<ErrorResponse> {
-    logger.error(e) { "Непредвиденная ошибка" }
-    return ResponseEntity
-        .status(HttpStatus.INTERNAL_SERVER_ERROR)
-        .body(ErrorResponse(500, "Внутренняя ошибка сервера"))
+@ExtendWith(MockitoExtension::class)
+class RestaurantServiceTest {
+
+    @Mock
+    lateinit var restaurantRepositoryPort: RestaurantRepositoryPort
+
+    @InjectMocks
+    lateinit var restaurantService: RestaurantService
+
+    @Test
+    fun `create сохраняет ресторан если имя свободно`() {
+        // Arrange
+        val restaurant = Restaurant(id = 0, name = "Pizza Place", address = "ул. Ленина, 1")
+        val saved = restaurant.copy(id = 1)
+        `when`(restaurantRepositoryPort.findByName("Pizza Place")).thenReturn(null)
+        `when`(restaurantRepositoryPort.create(restaurant)).thenReturn(saved)
+
+        // Act
+        val result = restaurantService.create(restaurant)
+
+        // Assert
+        assertEquals(saved, result)
+        verify(restaurantRepositoryPort).create(restaurant)
+    }
 }
 ```
 
-> `logger.error(e) { ... }` — записывает сообщение **и** стек-трейс в лог, но клиенту возвращает только безопасное сообщение.
+#### Негативный сценарий
+
+**Файл:** `src/test/kotlin/com/example/lab3/application/RestaurantServiceTest.kt`
+
+```kotlin
+@Test
+fun `create бросает AlreadyExistsException при дублировании имени`() {
+    val restaurant = Restaurant(id = 0, name = "Pizza Place", address = "ул. Мира, 5")
+    `when`(restaurantRepositoryPort.findByName("Pizza Place"))
+        .thenReturn(Restaurant(id = 2, name = "Pizza Place", address = "другой адрес"))
+
+    assertThrows<AlreadyExistsException> {
+        restaurantService.create(restaurant)
+    }
+
+    verify(restaurantRepositoryPort, never()).create(restaurant)
+}
+```
+
+#### Проверка бизнес-правил (смена статуса заказа)
+
+**Файл:** `src/test/kotlin/com/example/lab3/application/OrderServiceTest.kt`
+
+```kotlin
+@Test
+fun `updateStatus бросает InvalidOrderStateException при недопустимом переходе`() {
+    val existing = Order(
+        id = 1, userId = 1, status = OrderStatus.DELIVERED,
+        createdAt = LocalDateTime.now(), dishIds = listOf(10L)
+    )
+    whenever(orderRepositoryPort.findById(1)).thenReturn(existing)
+
+    assertThrows<InvalidOrderStateException> {
+        orderService.updateStatus(1, OrderStatus.PENDING)
+    }
+}
+```
 
 ---
 
-## Практическое задание
+### 4. Интеграционные тесты API
 
-### 1) Создайте иерархию кастомных исключений
+Класс `RestaurantIntegrationTest` поднимает полный Spring-контекст и отправляет HTTP-запросы через MockMvc. База данных — PostgreSQL в Docker-контейнере (Testcontainers).
 
-1. `sealed class AppException` — базовый класс.
-2. `NotFoundException` — ресурс не найден.
-3. `AlreadyExistsException` — конфликт (например, дублирование имени ресторана).
-4. `InvalidOrderStateException` — недопустимый переход статуса заказа.
+#### Настройка контейнера и контекста
 
-### 2) Реализуйте @RestControllerAdvice
+**Файл:** `src/test/kotlin/com/example/lab3/api/RestaurantIntegrationTest.kt`
 
-Создайте `GlobalExceptionHandler`, который обрабатывает:
+```kotlin
+@SpringBootTest
+@AutoConfigureMockMvc
+@Testcontainers
+@ActiveProfiles("test")
+@Transactional
+class RestaurantIntegrationTest {
 
-1. `NotFoundException` → `404 Not Found`.
-2. `AlreadyExistsException` → `409 Conflict`.
-3. `InvalidOrderStateException` → `400 Bad Request`.
-4. `MethodArgumentNotValidException` → `400 Bad Request` с ошибками по полям.
-5. `Exception` → `500 Internal Server Error` (fallback).
+    companion object {
+        @Container
+        @ServiceConnection
+        @JvmStatic
+        val postgres = PostgreSQLContainer<Nothing>("postgres:16-alpine").apply {
+            withDatabaseName("integration-tests-db")
+            withUsername("test")
+            withPassword("test")
+        }
+    }
 
-Все ответы — в едином формате (`ErrorResponse` / `ValidationErrorResponse`).
+    @Autowired
+    lateinit var mockMvc: MockMvc
+}
+```
 
-### 3) Добавьте валидацию на DTO
+`@ServiceConnection` автоматически прокидывает URL и credentials контейнера в Spring DataSource. `@Transactional` откатывает изменения в БД после каждого теста.
 
-Используйте аннотации `jakarta.validation` на всех входных DTO:
+#### Позитивный сценарий — создание ресторана
 
-1. `CreateRestaurantRequest` — `name` не пустое, `address` не пустой.
-2. `CreateDishRequest` — `name` не пустое, `price` > 0.
-3. `CreateOrderRequest` — `userId` не null, `dishIds` не пустой.
-4. Используйте `@Valid` в контроллерах перед `@RequestBody`.
+**Файл:** `src/test/kotlin/com/example/lab3/api/RestaurantIntegrationTest.kt`
 
-### 4) Выбросьте кастомные исключения из сервисов
+```kotlin
+@Test
+fun `POST restaurant возвращает 201 и создаёт запись`() {
+    mockMvc.post("/api/v1/restaurants") {
+        contentType = MediaType.APPLICATION_JSON
+        content = """{"name": "Integration Place", "address": "ул. Тестовая, 1"}"""
+    }.andExpect {
+        status { isCreated() }
+        jsonPath("$.id") { exists() }
+        jsonPath("$.name") { value("Integration Place") }
+        jsonPath("$.address") { value("ул. Тестовая, 1") }
+    }
+}
+```
 
-Замените все места, где сервис возвращает `null` или бросает стандартные исключения:
+#### Негативные сценарии — валидация и конфликт
 
-1. `findById` → если не найдено, бросать `NotFoundException`.
-2. Создание ресторана с дублирующимся именем → `AlreadyExistsException`.
-3. Смена статуса заказа на недопустимый → `InvalidOrderStateException`.
+**Файл:** `src/test/kotlin/com/example/lab3/api/RestaurantIntegrationTest.kt`
 
-### 5) Добавьте логгирование
+```kotlin
+@Test
+fun `GET несуществующий ресторан возвращает 404`() {
+    mockMvc.get("/api/v1/restaurants/999999")
+        .andExpect {
+            status { isNotFound() }
+            jsonPath("$.status") { value(404) }
+            jsonPath("$.message") { exists() }
+        }
+}
 
-1. Добавьте логгер в сервисный слой и в `GlobalExceptionHandler`.
-2. Логируйте: создание/удаление сущностей (`INFO`), ошибки «не найдено» (`WARN`), непредвиденные ошибки (`ERROR` с трейсом).
-3. Настройте уровни логирования через `logback-spring.xml`.
-4. Настройте запись логов уровня `WARN` и `ERROR` в отдельный файл (appender `FILE`).
+@Test
+fun `POST restaurant с пустым именем возвращает 400 и errors`() {
+    mockMvc.post("/api/v1/restaurants") {
+        contentType = MediaType.APPLICATION_JSON
+        content = """{"name": "", "address": "ул. Тестовая, 1"}"""
+    }.andExpect {
+        status { isBadRequest() }
+        jsonPath("$.status") { value(400) }
+        jsonPath("$.errors.name") { exists() }
+    }
+}
+```
+
+Покрыты эндпоинты `RestaurantController`:
+
+| Сценарий                              | Ожидаемый результат |
+|:--------------------------------------|:--------------------|
+| POST `/api/v1/restaurants`            | 201, тело с id, name, address |
+| GET `/api/v1/restaurants/{id}`        | 200, корректные данные |
+| GET `/api/v1/restaurants/999999`     | 404, `{ status, message }` |
+| POST с пустым name                  | 400, `{ errors.name }` |
+| POST с дублирующимся именем         | 409 |
+| PUT несуществующего ресторана       | 404 |
 
 ---
 
-## Критерии оценки (максимум 10 баллов)
+### 5. CI
 
-| Категория             | Критерий                                                     | Баллы  |
-|:----------------------|:-------------------------------------------------------------|:------:|
-| Штраф                 | Не проходят автотесты                                        |   -5   |
-| Кастомные исключения  | Есть sealed-иерархия, используется в сервисах                |   1    |
-| @RestControllerAdvice | Единый обработчик, корректные статусы (400/404/409/500)      |   2    |
-| Валидация DTO         | `@Valid` / `@Validated` + аннотации на входных DTO           |   2    |
-| Ошибки валидации      | `MethodArgumentNotValidException` возвращает ошибки по полям |   2    |
-| Логгирование          | Логгер в сервисах и обработчике ошибок, настроены уровни     |   2    |
-| Качество решения      | Единый формат ответа, чистота кода                           |   1    |
-| **Итого**             |                                                              | **10** |
+**Файл:** `.github/workflows/ci.yaml`
+
+```yaml
+name: CI
+
+on:
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: maven
+      - name: Run tests
+        run: ./mvnw test
+```
+
+При создании pull request выполняется `./mvnw test`. GitHub Actions предоставляет Docker, поэтому интеграционные тесты проходят в CI без дополнительной настройки.
 
 ---
 
-## Мини-чеклист перед сдачей
+## Запуск
 
-1. `POST` с невалидным телом возвращает `400` с перечнем ошибок по полям.
-2. `GET /api/v1/restaurants/999999` возвращает `404` в едином формате, а не Spring-трейс.
-3. Создание ресторана с дублирующимся именем возвращает `409`.
-4. Непредвиденная ошибка возвращает `500` без стек-трейса в теле ответа.
-5. В логах видны `INFO`/`WARN`/`ERROR` записи от вашего приложения.
-6. Все прежние CRUD-эндпоинты из ЛР-4 по-прежнему работают.
+### База данных
 
----
+```bash
+docker compose up -d
+```
 
-## Что почитать
+Параметры подключения (из `application.yml`): `localhost:5432`, БД `postgres`, пользователь/пароль `postgres`.
 
-1. [Spring Boot Error Handling](https://www.baeldung.com/exception-handling-for-rest-with-spring)
-2. [Bean Validation with Spring Boot](https://www.baeldung.com/spring-boot-bean-validation)
-3. [Jakarta Validation Constraints](https://jakarta.ee/specifications/bean-validation/3.0/jakarta-bean-validation-spec-3.0.html)
-4. [SLF4J Manual](https://www.slf4j.org/manual.html)
-5. [kotlin-logging](https://github.com/MicroUtils/kotlin-logging)
-6. [Spring Boot Logging](https://docs.spring.io/spring-boot/reference/features/logging.html)
+### Приложение
+
+```bash
+./mvnw spring-boot:run
+```
+
+Сервер стартует на `http://localhost:8080`.
+
+### Автотесты
+
+
+```bash
+# все тесты
+./mvnw test
+
+# только unit-тесты
+./mvnw test -Dtest="*ServiceTest"
+
+# только интеграционные
+./mvnw test -Dtest="*IntegrationTest"
+```
+
+```bash
+bash .test/run-test.sh
+```
+
+
+## Эндпоинты
+
+| Метод  | Путь                              | Описание                    |
+|:-------|:----------------------------------|:----------------------------|
+| GET    | `/api/v1/users`                   | Список пользователей        |
+| POST   | `/api/v1/users`                   | Создать / вернуть по email  |
+| GET    | `/api/v1/restaurants`             | Список ресторанов           |
+| POST   | `/api/v1/restaurants`             | Создать ресторан            |
+| GET    | `/api/v1/restaurants/{id}/dishes` | Меню ресторана              |
+| POST   | `/api/v1/restaurants/{id}/dishes` | Добавить блюдо              |
+| GET    | `/api/v1/dishes`                  | Список блюд (фильтр namePart) |
+| POST   | `/api/v1/orders`                  | Создать заказ               |
+| PATCH  | `/api/v1/orders/{id}/status`      | Сменить статус заказа       |
+
+Полное описание — в `spec.yaml`.
