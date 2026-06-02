@@ -1,0 +1,6 @@
+#FileLock
+#Tue Feb 24 16:20:41 NOVT 2026
+hostName=192.168.0.25
+id=19c8ef35a9e28aead9a137fbb21cdc71494b0989055
+method=file
+server=192.168.0.25\:51462
