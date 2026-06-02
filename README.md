@@ -291,6 +291,9 @@ docker compose up -d postgres
 
 <img width="635" height="353" alt="image" src="https://github.com/user-attachments/assets/740d527f-38f8-4a25-ba6f-aa0bdebf6c5c" />
 
+<img width="533" height="286" alt="image" src="https://github.com/user-attachments/assets/babfad7d-2668-4a5d-83ae-4a5f7250401d" />
+
+
 
 ---
 ## Эндпоинты (кратко)
