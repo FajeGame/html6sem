@@ -281,6 +281,15 @@ docker compose up -d postgres
 
 ## Скриншоты
 
+<img width="390" height="498" alt="image" src="https://github.com/user-attachments/assets/1b4b1a44-8f9d-4a9a-8b45-6b238d4ab370" />
+
+<img width="546" height="75" alt="image" src="https://github.com/user-attachments/assets/c9720b43-8081-41b8-a850-f8c56f879c8f" />
+
+
+<img width="560" height="331" alt="image" src="https://github.com/user-attachments/assets/abe115c1-f0f2-4b30-9f58-d0eb54029cf6" />
+
+
+<img width="635" height="353" alt="image" src="https://github.com/user-attachments/assets/740d527f-38f8-4a25-ba6f-aa0bdebf6c5c" />
 
 
 ---
