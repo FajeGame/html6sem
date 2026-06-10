@@ -1,0 +1,34 @@
+info:
+  name: Get User By Path
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{baseUrl}}/greeting/{{savedUserId}}"
+  headers:
+    - name: Accept
+      value: application/json
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const response = res.getBody();
+        const jsonResponse = typeof response === 'string' ? JSON.parse(response) : response;
+
+        console.log("User data:", jsonResponse);
+
+        // Простая проверка (можно расширить)
+        if (jsonResponse.name === "Ivan" && jsonResponse.surname === "Ivanov") {
+            console.log("✅ User data verified");
+        } else {
+            console.error("❌ User data mismatch");
+        }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
