@@ -1,0 +1,14 @@
+<component name="libraryTable">
+  <library name=".solutions">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/.solutions/t5.jar!/" />
+      <root url="jar://$PROJECT_DIR$/.solutions/t6.jar!/" />
+      <root url="jar://$PROJECT_DIR$/.solutions/t3.jar!/" />
+      <root url="jar://$PROJECT_DIR$/.solutions/t2.jar!/" />
+      <root url="jar://$PROJECT_DIR$/.solutions/t1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/.solutions/t4.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

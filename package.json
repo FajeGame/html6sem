@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "kotlinc": "^0.1.5"
+  }
+}
